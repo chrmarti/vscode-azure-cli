@@ -11,6 +11,7 @@
         "Other"
     ],
     "activationEvents": [
+        "*",
         "onCommand:azure-cli.openTerminal",
         "onCommand:azure-cli.openTerminal20",
         "onCommand:azure-cli.openTerminalPowershell"
