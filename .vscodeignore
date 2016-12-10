@@ -3,6 +3,7 @@
 out/test/**
 test/**
 src/**
+jumpbox/**
 **/*.map
 .gitignore
 tsconfig.json
