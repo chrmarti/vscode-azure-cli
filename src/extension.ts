@@ -1,5 +1,6 @@
-import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as shortid from 'shortid';
+import * as vscode from 'vscode';
 
 interface CLI {
     commandId: string;
@@ -33,11 +34,14 @@ export const commands = clis.reduce((cmds, cli) => Object.assign(cmds, {
                         .catch(err => console.error(err))
 }), <commands>{});
 
+const terminals: vscode.Terminal[] = [];
+
 export function activate(context: vscode.ExtensionContext) {
+    const subscriptions = context.subscriptions;
+    subscriptions.push(vscode.window.onDidCloseTerminal(onDidCloseTerminal));
     listTerminalSessions().then(sessions => {
         sessions.forEach(attachSession);
     });
-    const subscriptions = context.subscriptions;
     for (const commandId in commands) {
         subscriptions.push(vscode.commands.registerCommand(commandId, commands[commandId]));
     }
@@ -47,15 +51,29 @@ function openTerminal(cli: CLI): Promise<void> {
     return listTerminalSessions().then(names => {
         const sessionName = newSessionName(cli.terminalName, names);
         const terminal = vscode.window.createTerminal(sessionName);
+        terminals.push(terminal);
         terminal.show();
         terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
-        terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s '${toTmuxSessionName(sessionName)}'\\; set status off\\; set prefix None`);
-        terminal.sendText(`docker run -it --rm -v ${vscode.workspace.rootPath}:/code -w /code ${cli.dockerImage}`);
+        terminal.sendText(`docker start ${jumpboxName}`);
+        const containerName = `azure-cli-${shortid.generate()}`;
+        terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s '${toTmuxSessionName(sessionName)}' /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${vscode.workspace.rootPath}:/code -w /code ${cli.dockerImage}"; exit`);
     });
 }
 
+function onDidCloseTerminal(terminal: vscode.Terminal) {
+    const i = terminals.indexOf(terminal);
+    if (i !== -1) {
+        terminals.splice(i, 1);
+        cp.exec(`docker exec -t ${jumpboxName} tmux kill-session -t '${toTmuxSessionName(terminal.name)}'`, err => {
+            if (err) {
+                console.error(err);
+            }
+        });
+    }
+}
+
 function newSessionName(prefix: string, existingNames: string[]): string {
-    let name;
+    let name: string;
     for (let i = 1; existingNames.indexOf(name = i > 1 ? `${prefix} (${i})` : prefix) !== -1; i++);
     return name;
 }
@@ -108,7 +126,10 @@ function listDockerContainers(): Promise<string[]> {
 
 function attachSession(sessionName: string) {
         const terminal = vscode.window.createTerminal(sessionName);
+        terminals.push(terminal);
         terminal.show();
+        terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
+        terminal.sendText(`docker start ${jumpboxName}`);
         terminal.sendText(`docker exec -it ${jumpboxName} tmux attach-session -t '${toTmuxSessionName(sessionName)}'`);
 }
 
