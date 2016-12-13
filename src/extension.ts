@@ -22,7 +22,7 @@ const clis: CLI[] = [
     {
         commandId: 'azure-cli.openTerminalPowershell',
         terminalName: 'Azure Powershell',
-        dockerImage: 'lukaszkaluzny/powershell-azure',
+        dockerImage: '10thmagnitude/powershell-azure',
     }
 ];
 
@@ -53,6 +53,8 @@ function openTerminal(cli: CLI): Promise<void> {
         const terminal = vscode.window.createTerminal(sessionName);
         terminals.push(terminal);
         terminal.show();
+        terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
+        terminal.sendText(`docker pull ${cli.dockerImage}`);
         terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
         terminal.sendText(`docker start ${jumpboxName}`);
         const containerName = `azure-cli-${shortid.generate()}`;
@@ -128,6 +130,7 @@ function attachSession(sessionName: string) {
         const terminal = vscode.window.createTerminal(sessionName);
         terminals.push(terminal);
         terminal.show();
+        terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
         terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
         terminal.sendText(`docker start ${jumpboxName}`);
         terminal.sendText(`docker exec -it ${jumpboxName} tmux attach-session -t '${toTmuxSessionName(sessionName)}'`);
