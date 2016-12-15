@@ -1,4 +1,5 @@
 import * as cp from 'child_process';
+import * as opn from 'opn';
 import * as shortid from 'shortid';
 import * as vscode from 'vscode';
 
@@ -39,8 +40,12 @@ const terminals: vscode.Terminal[] = [];
 export function activate(context: vscode.ExtensionContext) {
     const subscriptions = context.subscriptions;
     subscriptions.push(vscode.window.onDidCloseTerminal(onDidCloseTerminal));
-    listTerminalSessions().then(sessions => {
-        sessions.forEach(attachSession);
+    checkDockerInstall().then(installed => {
+        if (installed) {
+            return listTerminalSessions().then(sessions => {
+                sessions.forEach(attachSession);
+            });
+        }
     });
     for (const commandId in commands) {
         subscriptions.push(vscode.commands.registerCommand(commandId, commands[commandId]));
@@ -48,17 +53,42 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function openTerminal(cli: CLI): Promise<void> {
-    return listTerminalSessions().then(names => {
-        const sessionName = newSessionName(cli.terminalName, names);
-        const terminal = vscode.window.createTerminal(sessionName);
-        terminals.push(terminal);
-        terminal.show();
-        terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
-        terminal.sendText(`docker pull ${cli.dockerImage}`);
-        terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
-        terminal.sendText(`docker start ${jumpboxName}`);
-        const containerName = `azure-cli-${shortid.generate()}`;
-        terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s '${toTmuxSessionName(sessionName)}' /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${vscode.workspace.rootPath}:/code -w /code ${cli.dockerImage}"; exit`);
+    return checkDockerInstall().then(installed => {
+        if (installed) {
+            return listTerminalSessions().then(names => {
+                const sessionName = newSessionName(cli.terminalName, names);
+                const terminal = vscode.window.createTerminal(sessionName);
+                terminals.push(terminal);
+                terminal.show();
+                terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
+                terminal.sendText(`docker pull ${cli.dockerImage}`);
+                terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
+                terminal.sendText(`docker start ${jumpboxName}`);
+                const containerName = `azure-cli-${shortid.generate()}`;
+                terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s '${toTmuxSessionName(sessionName)}' /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${vscode.workspace.rootPath}:/code -w /code ${cli.dockerImage}"; exit`);
+            });
+        } else {
+            return dockerNotFound();
+        }
+    });
+}
+
+function dockerNotFound(): Thenable<void> {
+    return vscode.window.showInformationMessage<any>('Docker not found on PATH, make sure it is installed.',
+        {
+            title: 'Download',
+            run: () => {
+                opn('https://www.docker.com/');
+            }
+        },
+        {
+            title: 'Close',
+            isCloseAffordance: true
+        }
+    ).then(result => {
+        if (result && result.run) {
+            result.run();
+        }
     });
 }
 
@@ -122,6 +152,14 @@ function listDockerContainers(): Promise<string[]> {
                 resolve(stdout.split(/\r?\n/)
                     .filter(name => !!name));
             }
+        });
+    });
+}
+
+function checkDockerInstall(): Promise<boolean> {
+    return new Promise(resolve => {
+        cp.exec('docker --help', err => {
+            resolve(!err);
         });
     });
 }
