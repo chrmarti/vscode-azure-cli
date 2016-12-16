@@ -4,6 +4,14 @@
   "description": "Azure CLIs for VS Code",
   "version": "0.1.1",
   "publisher": "chrmarti",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrmarti/vscode-azure-cli.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/chrmarti/vscode-azure-cli/issues"
+  },
   "engines": {
     "vscode": "^1.7.2"
   },
