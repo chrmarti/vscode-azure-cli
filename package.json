@@ -2,7 +2,7 @@
   "name": "azure-cli",
   "displayName": "Azure CLI",
   "description": "Azure CLIs for VS Code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "chrmarti",
   "engines": {
     "vscode": "^1.7.2"

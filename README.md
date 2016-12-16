@@ -8,6 +8,10 @@ The `docker` command line tool must be on the PATH.
 
 ## Release Notes
 
+### 0.1.1
+
+- Show message if `docker` is not on the PATH.
+
 ### 0.1.0
 
-Initial release.
+- Initial release.
