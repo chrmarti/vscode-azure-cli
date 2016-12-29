@@ -2,6 +2,10 @@ import * as cp from 'child_process';
 import * as opn from 'opn';
 import * as shortid from 'shortid';
 import * as vscode from 'vscode';
+import { StringDecoder } from 'string_decoder';
+import { Readable } from "stream";
+
+const isWindows = process.platform === 'win32';
 
 interface CLI {
     commandId: string;
@@ -65,7 +69,9 @@ function openTerminal(cli: CLI): Promise<void> {
                 terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
                 terminal.sendText(`docker start ${jumpboxName}`);
                 const containerName = `azure-cli-${shortid.generate()}`;
-                terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s '${toTmuxSessionName(sessionName)}' /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${vscode.workspace.rootPath}:/code -w /code ${cli.dockerImage}"; exit`);
+                const rootPath = vscode.workspace.rootPath;
+                const pathToMount = isWindows ? rootPath.replace(/\\/g, '/').replace(/^(\w):/, '//$1/') : rootPath;
+                terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s "${toTmuxSessionName(sessionName)}" /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${pathToMount}:/code -w /code ${cli.dockerImage}"${isWindows ? ' &' : ';'} exit`);
             });
         } else {
             return dockerNotFound();
@@ -96,7 +102,7 @@ function onDidCloseTerminal(terminal: vscode.Terminal) {
     const i = terminals.indexOf(terminal);
     if (i !== -1) {
         terminals.splice(i, 1);
-        cp.exec(`docker exec -t ${jumpboxName} tmux kill-session -t '${toTmuxSessionName(terminal.name)}'`, err => {
+        cp.exec(`docker exec -t ${jumpboxName} tmux kill-session -t "${toTmuxSessionName(terminal.name)}"`, err => {
             if (err) {
                 console.error(err);
             }
@@ -124,17 +130,33 @@ function listTerminalSessions(): Promise<string[]> {
             return [];
         }
         return new Promise((resolve, reject) => {
-            cp.exec(`docker exec -t ${jumpboxName} tmux start-server\\; list-sessions -F '#{session_name}'`, (err, stdout) => {
-                if (err) {
-                    reject(err);
+            const child = cp.spawn('docker', `exec -t ${jumpboxName} tmux start-server; list-sessions -F #{session_name}`.split(' '));
+            const stdout = collectData(child.stdout, 'utf8');
+            const stderr = collectData(child.stderr, 'utf8');
+            child.on('error', err => {
+                reject(err);
+            });
+
+            child.on('close', code => {
+                if (code) {
+                    reject(stderr.join('') || code);
                 } else {
-                    resolve(stdout.split(/\r?\n/)
+                    resolve(stdout.join('').split(/\r?\n/)
                         .filter(sessionName => !!sessionName)
                         .map(sessionName => fromTmuxSessionName(sessionName)));
                 }
             });
         });
     });
+}
+
+function collectData(stream: Readable, encoding: string): string[] {
+    const data: string[] = [];
+    const decoder = new StringDecoder(encoding);
+    stream.on('data', (buffer: Buffer) => {
+        data.push(decoder.write(buffer));
+    });
+    return data;
 }
 
 function isAzureCliJumpboxRunning(): Promise<boolean> {
@@ -171,7 +193,7 @@ function attachSession(sessionName: string) {
         terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
         terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
         terminal.sendText(`docker start ${jumpboxName}`);
-        terminal.sendText(`docker exec -it ${jumpboxName} tmux attach-session -t '${toTmuxSessionName(sessionName)}'`);
+        terminal.sendText(`docker exec -it ${jumpboxName} tmux attach-session -t "${toTmuxSessionName(sessionName)}"${isWindows ? ' &' : ';'} exit`);
 }
 
 export function deactivate() {
