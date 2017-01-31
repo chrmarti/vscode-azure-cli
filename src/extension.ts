@@ -11,6 +11,7 @@ interface CLI {
     commandId: string;
     terminalName: string;
     dockerImage: string;
+    extraArguments?: string;
 }
 
 const clis: CLI[] = [
@@ -28,6 +29,7 @@ const clis: CLI[] = [
         commandId: 'azure-cli.openTerminalPowershell',
         terminalName: 'Azure Powershell',
         dockerImage: '10thmagnitude/powershell-azure',
+        extraArguments: '--entrypoint powershell',
     }
 ];
 
@@ -71,7 +73,7 @@ function openTerminal(cli: CLI): Promise<void> {
                 const containerName = `azure-cli-${shortid.generate()}`;
                 const rootPath = vscode.workspace.rootPath;
                 const pathToMount = isWindows ? rootPath.replace(/\\/g, '/').replace(/^(\w):/, '//$1/') : rootPath;
-                terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s "${toTmuxSessionName(sessionName)}" /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${pathToMount}:/code -w /code ${cli.dockerImage}"${isWindows ? ' &' : ';'} exit`);
+                terminal.sendText(`docker exec -it ${jumpboxName} tmux new-session -s "${toTmuxSessionName(sessionName)}" /bin/bash -c "trap 'docker rm -f ${containerName}' EXIT && docker run --name ${containerName} -it -v ${pathToMount}:/code -w /code ${cli.extraArguments || ''} ${cli.dockerImage}"${isWindows ? ' &' : ';'} exit`);
             });
         } else {
             return dockerNotFound();
