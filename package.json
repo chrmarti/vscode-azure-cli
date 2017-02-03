@@ -52,7 +52,7 @@
     "@types/opn": "^3.0.28",
     "@types/shortid": "0.0.28",
     "mocha": "^2.3.3",
-    "typescript": "^2.0.10",
+    "typescript": "^2.1.5",
     "vscode": "^1.0.3"
   },
   "dependencies": {
