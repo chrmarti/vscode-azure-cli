@@ -3,8 +3,11 @@ import * as opn from 'opn';
 import * as shortid from 'shortid';
 import * as vscode from 'vscode';
 import { StringDecoder } from 'string_decoder';
-import { Readable } from "stream";
+import { Readable } from 'stream';
+import { Receiver, IScannerArguments } from './matchReceiver';
+import * as ncp from 'copy-paste';
 
+const isOSX = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
 interface CLI {
@@ -43,27 +46,53 @@ export const commands = clis.reduce((cmds, cli) => Object.assign(cmds, {
 
 const terminals: vscode.Terminal[] = [];
 
+let receiver = new Receiver();
+
 export function activate(context: vscode.ExtensionContext) {
+    receiver.start();
     const subscriptions = context.subscriptions;
     subscriptions.push(vscode.window.onDidCloseTerminal(onDidCloseTerminal));
     checkDockerInstall().then(installed => {
         if (installed) {
-            return listTerminalSessions().then(sessions => {
-                sessions.forEach(attachSession);
+            return Promise.all([listTerminalSessions(), getScannerArguments()]).then(([sessions, args]) => {
+                sessions.forEach(session => attachSession(session, args));
             });
         }
     });
     for (const commandId in commands) {
         subscriptions.push(vscode.commands.registerCommand(commandId, commands[commandId]));
     }
+    subscriptions.push(receiver.onMatch(match => {
+        vscode.window.showInformationMessage('Copy login code to clipboard and open login page?',
+            <vscode.MessageItem>{ title: 'Yes' },
+            { title: 'No', isCloseAffordance: true }
+        ).then(result => {
+            if (result && result.title === 'Yes') {
+                ncp.copy(match[1], () => {
+                    opn(loginUrl);
+                });
+            }
+        });
+    }));
+}
+
+const loginUrl = 'https://aka.ms/devicelogin';
+const pattern = 'To sign in, use a web browser to open the page https://aka\\.ms/devicelogin and enter the code (\\w*) to authenticate\\.';
+
+function getScannerArguments() {
+    const config = <any>vscode.workspace.getConfiguration('terminal.integrated');
+    const osSuffix = isOSX ? 'osx' : isWindows ? 'windows' : 'linux';
+    const shell = config.shell[osSuffix];
+    const shellArgs = config.shellArgs[osSuffix];
+    return receiver.getScannerArguments(pattern, shell, shellArgs);
 }
 
 function openTerminal(cli: CLI): Promise<void> {
     return checkDockerInstall().then(installed => {
         if (installed) {
-            return listTerminalSessions().then(names => {
+            return Promise.all([listTerminalSessions(), getScannerArguments()]).then(([names, args]) => {
                 const sessionName = newSessionName(cli.terminalName, names);
-                const terminal = vscode.window.createTerminal(sessionName);
+                const terminal = vscode.window.createTerminal(sessionName, 'node', [`${__dirname}/outputScanner.js`, JSON.stringify(args)]);
                 terminals.push(terminal);
                 terminal.show();
                 terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
@@ -114,7 +143,7 @@ function onDidCloseTerminal(terminal: vscode.Terminal) {
 
 function newSessionName(prefix: string, existingNames: string[]): string {
     let name: string;
-    for (let i = 1; existingNames.indexOf(name = i > 1 ? `${prefix} (${i})` : prefix) !== -1; i++);
+    for (let i = 1; existingNames.indexOf(name = i > 1 ? `${prefix} (${i})` : prefix) !== -1; i++) {}
     return name;
 }
 
@@ -188,8 +217,8 @@ function checkDockerInstall(): Promise<boolean> {
     });
 }
 
-function attachSession(sessionName: string) {
-        const terminal = vscode.window.createTerminal(sessionName);
+function attachSession(sessionName: string, args: IScannerArguments) {
+        const terminal = vscode.window.createTerminal(sessionName, 'node', [`${__dirname}/outputScanner.js`, JSON.stringify(args)]);
         terminals.push(terminal);
         terminal.show();
         terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
