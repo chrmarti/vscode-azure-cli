@@ -8,6 +8,11 @@ The `docker` command line tool must be on the PATH.
 
 ## Release Notes
 
+### 0.3.0
+
+- Offer to open login URL.
+- Fix Powershell startup.
+
 ### 0.2.0
 
 - Get it to work on Windows.
