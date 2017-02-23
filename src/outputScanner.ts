@@ -1,7 +1,7 @@
 import { EOL } from 'os';
 import * as net from 'net';
-import { fork } from 'node-pty';
 import { IScannerArguments } from './matchReceiver';
+const fork: typeof node_pty.fork = require(`../../os/${process.platform}/node_modules/node-pty`).fork;
 
 const args: IScannerArguments = JSON.parse(process.argv[2]);
 
