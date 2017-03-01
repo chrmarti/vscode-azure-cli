@@ -6,6 +6,7 @@ import { StringDecoder } from 'string_decoder';
 import { Readable } from 'stream';
 import { Receiver, IScannerArguments } from './matchReceiver';
 import * as ncp from 'copy-paste';
+import * as path from 'path';
 
 const isOSX = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
@@ -92,7 +93,7 @@ function openTerminal(cli: CLI): Promise<void> {
         if (installed) {
             return Promise.all([listTerminalSessions(), getScannerArguments()]).then(([names, args]) => {
                 const sessionName = newSessionName(cli.terminalName, names);
-                const terminal = vscode.window.createTerminal(sessionName, 'node', [`${__dirname}/outputScanner.js`, JSON.stringify(args)]);
+                const terminal = vscode.window.createTerminal(sessionName, path.join(__dirname, `../../bin/node.${isWindows ? 'bat': 'sh'}`), [process.argv0, `${__dirname}/outputScanner.js`, JSON.stringify(args)]);
                 terminals.push(terminal);
                 terminal.show();
                 terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
@@ -218,13 +219,13 @@ function checkDockerInstall(): Promise<boolean> {
 }
 
 function attachSession(sessionName: string, args: IScannerArguments) {
-        const terminal = vscode.window.createTerminal(sessionName, 'node', [`${__dirname}/outputScanner.js`, JSON.stringify(args)]);
-        terminals.push(terminal);
-        terminal.show();
-        terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
-        terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
-        terminal.sendText(`docker start ${jumpboxName}`);
-        terminal.sendText(`docker exec -it ${jumpboxName} tmux attach-session -t "${toTmuxSessionName(sessionName)}"${isWindows ? ' &' : ';'} exit`);
+    const terminal = vscode.window.createTerminal(sessionName, path.join(__dirname, `../../bin/node.${isWindows ? 'bat': 'sh'}`), [process.argv0, `${__dirname}/outputScanner.js`, JSON.stringify(args)]);
+    terminals.push(terminal);
+    terminal.show();
+    terminal.sendText(`docker pull chrmarti/azure-cli-jumpbox`);
+    terminal.sendText(`docker run --name ${jumpboxName} -d -t -v /var/run/docker.sock:/var/run/docker.sock chrmarti/azure-cli-jumpbox cat`);
+    terminal.sendText(`docker start ${jumpboxName}`);
+    terminal.sendText(`docker exec -it ${jumpboxName} tmux attach-session -t "${toTmuxSessionName(sessionName)}"${isWindows ? ' &' : ';'} exit`);
 }
 
 export function deactivate() {

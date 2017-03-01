@@ -24,3 +24,9 @@ The `docker` command line tool must be on the PATH.
 ### 0.1.0
 
 - Initial release.
+
+## Build
+
+```
+npm install --runtime=electron --target=1.4.6 --disturl=https://atom.io/download/atom-shell
+```
